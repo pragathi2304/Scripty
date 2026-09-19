@@ -2174,6 +2174,93 @@ def _current_user():
     return dict(row) if row else None
 
 
+def _record_login(user_id):
+    """Record one login day for the user. Multiple logins on the same day count once."""
+    login_date = datetime.now().date().isoformat()
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO login_history (user_id, login_date)
+            VALUES (?, ?)
+            """,
+            (user_id, login_date)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _calculate_login_streaks(user_id):
+    """Calculate consecutive calendar-day login streaks for one user."""
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        """
+        SELECT login_date
+        FROM login_history
+        WHERE user_id = ?
+        ORDER BY login_date ASC
+        """,
+        (user_id,)
+    ).fetchall()
+    conn.close()
+
+    login_dates = set()
+    for row in rows:
+        try:
+            login_dates.add(
+                datetime.strptime(str(row[0])[:10], "%Y-%m-%d").date()
+            )
+        except (TypeError, ValueError):
+            continue
+
+    if not login_dates:
+        return {
+            "current_streak": 0,
+            "best_streak": 0,
+            "login_days": 0,
+            "last_login_date": None,
+            "logged_in_today": False,
+        }
+
+    sorted_dates = sorted(login_dates)
+
+    best_streak = 1
+    running_streak = 1
+
+    for index in range(1, len(sorted_dates)):
+        difference = (sorted_dates[index] - sorted_dates[index - 1]).days
+        if difference == 1:
+            running_streak += 1
+        else:
+            running_streak = 1
+        best_streak = max(best_streak, running_streak)
+
+    today = datetime.now().date()
+    logged_in_today = today in login_dates
+
+    if not logged_in_today:
+        current_streak = 0
+    else:
+        current_streak = 1
+        check_date = today
+        while True:
+            previous_date = check_date - timedelta(days=1)
+            if previous_date in login_dates:
+                current_streak += 1
+                check_date = previous_date
+            else:
+                break
+
+    return {
+        "current_streak": current_streak,
+        "best_streak": best_streak,
+        "login_days": len(login_dates),
+        "last_login_date": sorted_dates[-1].isoformat(),
+        "logged_in_today": logged_in_today,
+    }
+
+
 def init_database():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
@@ -2215,6 +2302,14 @@ def init_database():
             overall_accuracy REAL NOT NULL DEFAULT 0,
             results TEXT,
             created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS login_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            login_date TEXT NOT NULL,
+            UNIQUE(user_id, login_date)
         )
     """)
     conn.commit()
@@ -2340,6 +2435,7 @@ def register_user():
     # Automatically log the user in after registration
     session.clear()
     session["user_id"] = user_id
+    _record_login(user_id)
 
     return jsonify({
         "success": True,
@@ -2462,6 +2558,7 @@ def login_user():
 
     session.clear()
     session["user_id"] = row["id"]
+    _record_login(row["id"])
 
     return jsonify({
         "success": True,
@@ -4596,12 +4693,15 @@ def get_streak():
             limit=10000
         )
 
-        streak = _calculate_streaks(attempts)
+        practice_streak = _calculate_streaks(attempts)
+        login_streak = _calculate_login_streaks(current_user["id"])
 
         return jsonify({
             "success": True,
-            "message": "Practice streak calculated successfully.",
-            "streak": streak,
+            "message": "Login streak calculated successfully.",
+            "streak": login_streak,
+            "login_streak": login_streak,
+            "practice_streak": practice_streak,
             "user": current_user
         })
 
@@ -5233,7 +5333,8 @@ def _build_progress_response(current_user):
             "characters": characters,
         }
 
-    streaks = _calculate_streaks(attempts)
+    practice_streaks = _calculate_streaks(attempts)
+    login_streaks = _calculate_login_streaks(current_user["id"])
 
     accuracy_values = []
     for attempt in attempts:
@@ -5265,9 +5366,13 @@ def _build_progress_response(current_user):
             "total_attempts": len(attempts),
             "overall_accuracy": overall_accuracy,
             "practiced_languages": practiced_languages,
-            "current_streak": streaks["current_streak"],
-            "best_streak": streaks["best_streak"],
-            "practice_days": streaks["practice_days"],
+            # Existing dashboard fields now represent the login streak.
+            "current_streak": login_streaks["current_streak"],
+            "best_streak": login_streaks["best_streak"],
+            "practice_days": practice_streaks["practice_days"],
+            "login_days": login_streaks["login_days"],
+            "login_streak": login_streaks,
+            "practice_streak": practice_streaks,
         },
     }
 
