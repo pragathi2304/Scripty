@@ -27,6 +27,14 @@ import tensorflow as tf
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SCRIPTLY_SECRET_KEY", "scriptly-development-secret-change-me")
+
+# Required when the Vercel frontend and Render backend are on different origins.
+app.config.update(
+    SESSION_COOKIE_SAMESITE="None",
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+)
+
 CORS(
     app,
     resources={
@@ -34,6 +42,7 @@ CORS(
             "origins": [
                 "http://localhost:5173",
                 "http://127.0.0.1:5173",
+                "https://scripty-beryl.vercel.app",
             ],
             "supports_credentials": True,
             "allow_headers": [
@@ -7093,23 +7102,23 @@ if __name__ == "__main__":
     print("=" * 70)
 
     print(
-        "Server: http://localhost:5000"
+        "Server: https://scripty-backend-zd0r.onrender.com"
     )
 
     print(
-        "Health: http://localhost:5000/health"
+        "Health: https://scripty-backend-zd0r.onrender.com/health"
     )
 
     print(
-        "Languages: http://localhost:5000/languages"
+        "Languages: https://scripty-backend-zd0r.onrender.com/languages"
     )
 
     print(
-        "Recognition: POST http://localhost:5000/recognize"
+        "Recognition: POST https://scripty-backend-zd0r.onrender.com/recognize"
     )
 
     print(
-        "Compatibility: POST http://localhost:5000/predict"
+        "Compatibility: POST https://scripty-backend-zd0r.onrender.com/predict"
     )
 
     print("=" * 70)
