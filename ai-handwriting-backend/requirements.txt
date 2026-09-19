@@ -3,4 +3,6 @@ Flask-CORS
 numpy
 Pillow
 tensorflow==2.21.0
+keras==3.15.1
+scikit-learn
 gunicorn
