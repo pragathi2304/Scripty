@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { Link, useNavigate } from "react-router-dom";
 
-const API_URL = "http://localhost:5000";
+const API_URL = "https://scripty-backend-zd0r.onrender.com";
 
 function Profile() {
 
