@@ -28,7 +28,7 @@ import tensorflow as tf
 app = Flask(__name__)
 app.secret_key = os.environ.get("SCRIPTLY_SECRET_KEY", "scriptly-development-secret-change-me")
 
-# Required when the Vercel frontend and Render backend are on different origins.
+# Required for Vercel frontend -> Render backend session cookies.
 app.config.update(
     SESSION_COOKIE_SAMESITE="None",
     SESSION_COOKIE_SECURE=True,
@@ -2277,11 +2277,29 @@ def init_database():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            phone TEXT DEFAULT '',
+            password TEXT DEFAULT '',
             password_salt TEXT NOT NULL,
             password_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            last_login TEXT
         )
     """)
+
+    # Migrate older SQLite databases that were created before the
+    # phone/password/last_login columns were added.
+    user_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()
+    }
+
+    if "phone" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''")
+
+    if "password" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN password TEXT DEFAULT ''")
+
+    if "last_login" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS attempts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
