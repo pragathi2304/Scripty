@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import styled from "styled-components";
 
-const API = "https://scripty-backend-zd0r.onrender.com";
+const API = "/api";
 
 export default function Settings() {
   const navigate = useNavigate();

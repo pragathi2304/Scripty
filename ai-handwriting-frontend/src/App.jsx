@@ -21,7 +21,7 @@ import Settings from "./pages/Settings";
 
 import GlobalStyles from "./styles/GlobalStyles";
 
-const API = "https://scripty-backend-zd0r.onrender.com";
+const API = "/api";
 
 function ProtectedRoute({ children }) {
   const location = useLocation();

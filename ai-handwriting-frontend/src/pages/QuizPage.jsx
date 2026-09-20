@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import styled from "styled-components";
 
-const API = "https://scripty-backend-zd0r.onrender.com";
+const API = "/api";
 
 const LANGUAGES = [
   { name: "All Languages", native: "English + हिंदी + 日本語 + 한국어 + Русский", symbol: "五", code: "ALL" },

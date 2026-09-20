@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import styled from "styled-components";
 
-const API = "https://scripty-backend-zd0r.onrender.com";
+const API = "/api";
 
 const LANGUAGE_META = {
   English: {

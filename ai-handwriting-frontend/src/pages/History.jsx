@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { Link } from "react-router-dom";
 
-const API = "http://127.0.0.1:5000";
+const API = "/api";
 
 function displayCharacter(language, character) {
   const japanese = {

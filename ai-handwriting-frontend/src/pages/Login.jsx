@@ -8,7 +8,7 @@ import "react-phone-input-2/lib/style.css";
 const PhoneInput =
   PhoneInputPackage.default || PhoneInputPackage;
 
-const API = "https://scripty-backend-zd0r.onrender.com";
+const API = "/api";
 
 
 function Login() {

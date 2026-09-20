@@ -378,7 +378,7 @@ function Practice() {
 
   const logout = async () => {
     try {
-      await fetch("https://scripty-backend-zd0r.onrender.com/auth/logout", {
+      await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
@@ -480,7 +480,7 @@ function Practice() {
 
           const response =
             await fetch(
-              "https://scripty-backend-zd0r.onrender.com/languages"
+              "/api/languages"
             );
 
           const data =
@@ -1130,7 +1130,7 @@ function Practice() {
 
         const response =
           await fetch(
-            "https://scripty-backend-zd0r.onrender.com/predict",
+            "/api/predict",
             {
               method: "POST",
 
@@ -1344,7 +1344,7 @@ function Practice() {
         // problem never prevents the recognition result.
         try {
          const saveResponse = await fetch(
-          "https://scripty-backend-zd0r.onrender.com/save-attempt",
+          "/api/save-attempt",
           {
             method: "POST",
             
