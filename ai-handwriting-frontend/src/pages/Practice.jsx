@@ -1130,7 +1130,7 @@ function Practice() {
 
         const response =
           await fetch(
-            "/api/predict",
+            "https://scripty-backend-zd0r.onrender.com/predict",
             {
               method: "POST",
 
