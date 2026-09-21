@@ -9,6 +9,16 @@ import shutil
 import tempfile
 import traceback
 import sqlite3
+
+# PostgreSQL is used on Render when DATABASE_URL is configured.
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    from psycopg2 import IntegrityError as PostgresIntegrityError
+except ImportError:
+    psycopg2 = None
+    RealDictCursor = None
+    PostgresIntegrityError = Exception
 import json
 from datetime import datetime, timedelta
 import hashlib
@@ -2146,6 +2156,46 @@ def detect_mistakes(stroke_analysis, is_correct, accuracy):
 # ============================================================
 
 DB_PATH = os.path.join(BASE_DIR, "scriptly.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+USE_POSTGRES = bool(DATABASE_URL)
+
+
+class DBConnection:
+    """Small SQLite/PostgreSQL compatibility layer for Scriptly."""
+
+    def __init__(self):
+        if USE_POSTGRES:
+            if psycopg2 is None:
+                raise RuntimeError(
+                    "DATABASE_URL is configured but psycopg2-binary is not installed."
+                )
+            self.is_postgres = True
+            self.raw = psycopg2.connect(DATABASE_URL)
+        else:
+            self.is_postgres = False
+            self.raw = sqlite3.connect(DB_PATH)
+            self.raw.row_factory = sqlite3.Row
+
+    def execute(self, sql, params=()):
+        if self.is_postgres:
+            sql = sql.replace("?", "%s")
+            cursor = self.raw.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(sql, params)
+            return cursor
+        return self.raw.execute(sql, params)
+
+    def commit(self):
+        self.raw.commit()
+
+    def rollback(self):
+        self.raw.rollback()
+
+    def close(self):
+        self.raw.close()
+
+
+def db_connect():
+    return DBConnection()
 
 
 def _hash_password(password, salt=None):
@@ -2173,8 +2223,7 @@ def _current_user():
     user_id = session.get("user_id")
     if not user_id:
         return None
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = db_connect()
     row = conn.execute(
         "SELECT id, name, email, created_at FROM users WHERE id = ?",
         (user_id,),
@@ -2186,12 +2235,13 @@ def _current_user():
 def _record_login(user_id):
     """Record one login day for the user. Multiple logins on the same day count once."""
     login_date = datetime.now().date().isoformat()
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     try:
         conn.execute(
             """
-            INSERT OR IGNORE INTO login_history (user_id, login_date)
+            INSERT INTO login_history (user_id, login_date)
             VALUES (?, ?)
+            ON CONFLICT (user_id, login_date) DO NOTHING
             """,
             (user_id, login_date)
         )
@@ -2202,7 +2252,7 @@ def _record_login(user_id):
 
 def _calculate_login_streaks(user_id):
     """Calculate consecutive calendar-day login streaks for one user."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
     rows = conn.execute(
         """
         SELECT login_date
@@ -2218,7 +2268,7 @@ def _calculate_login_streaks(user_id):
     for row in rows:
         try:
             login_dates.add(
-                datetime.strptime(str(row[0])[:10], "%Y-%m-%d").date()
+                datetime.strptime(str(row["login_date"])[:10], "%Y-%m-%d").date()
             )
         except (TypeError, ValueError):
             continue
@@ -2271,74 +2321,113 @@ def _calculate_login_streaks(user_id):
 
 
 def init_database():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-            phone TEXT DEFAULT '',
-            password TEXT DEFAULT '',
-            password_salt TEXT NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            last_login TEXT
-        )
-    """)
+    conn = db_connect()
 
-    # Migrate older SQLite databases that were created before the
-    # phone/password/last_login columns were added.
-    user_columns = {
-        row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()
-    }
+    if USE_POSTGRES:
+        # PostgreSQL schema used by Render. The SQL is intentionally kept
+        # close to the local SQLite schema so all existing API routes work.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                phone TEXT DEFAULT '',
+                password TEXT DEFAULT '',
+                password_salt TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_login TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS attempts (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER,
+                language TEXT NOT NULL,
+                character TEXT NOT NULL,
+                recognized TEXT,
+                confidence DOUBLE PRECISION,
+                accuracy DOUBLE PRECISION,
+                is_correct INTEGER NOT NULL DEFAULT 0,
+                stroke_count INTEGER,
+                stroke_analysis TEXT,
+                mistake_analysis TEXT,
+                feedback TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS quiz_attempts (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                language TEXT NOT NULL,
+                total_questions INTEGER NOT NULL DEFAULT 0,
+                correct_answers INTEGER NOT NULL DEFAULT 0,
+                incorrect_answers INTEGER NOT NULL DEFAULT 0,
+                score DOUBLE PRECISION NOT NULL DEFAULT 0,
+                overall_accuracy DOUBLE PRECISION NOT NULL DEFAULT 0,
+                results TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS login_history (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                login_date TEXT NOT NULL,
+                UNIQUE(user_id, login_date)
+            )
+        """)
+    else:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                phone TEXT DEFAULT '',
+                password TEXT DEFAULT '',
+                password_salt TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                last_login TEXT
+            )
+        """)
 
-    if "phone" not in user_columns:
-        conn.execute("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''")
+        user_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()
+        }
+        if "phone" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''")
+        if "password" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN password TEXT DEFAULT ''")
+        if "last_login" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
 
-    if "password" not in user_columns:
-        conn.execute("ALTER TABLE users ADD COLUMN password TEXT DEFAULT ''")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+                language TEXT NOT NULL, character TEXT NOT NULL, recognized TEXT,
+                confidence REAL, accuracy REAL, is_correct INTEGER NOT NULL DEFAULT 0,
+                stroke_count INTEGER, stroke_analysis TEXT, mistake_analysis TEXT,
+                feedback TEXT, created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS quiz_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+                language TEXT NOT NULL, total_questions INTEGER NOT NULL DEFAULT 0,
+                correct_answers INTEGER NOT NULL DEFAULT 0, incorrect_answers INTEGER NOT NULL DEFAULT 0,
+                score REAL NOT NULL DEFAULT 0, overall_accuracy REAL NOT NULL DEFAULT 0,
+                results TEXT, created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS login_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+                login_date TEXT NOT NULL, UNIQUE(user_id, login_date)
+            )
+        """)
 
-    if "last_login" not in user_columns:
-        conn.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS attempts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            language TEXT NOT NULL,
-            character TEXT NOT NULL,
-            recognized TEXT,
-            confidence REAL,
-            accuracy REAL,
-            is_correct INTEGER NOT NULL DEFAULT 0,
-            stroke_count INTEGER,
-            stroke_analysis TEXT,
-            mistake_analysis TEXT,
-            feedback TEXT,
-            created_at TEXT NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS quiz_attempts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            language TEXT NOT NULL,
-            total_questions INTEGER NOT NULL DEFAULT 0,
-            correct_answers INTEGER NOT NULL DEFAULT 0,
-            incorrect_answers INTEGER NOT NULL DEFAULT 0,
-            score REAL NOT NULL DEFAULT 0,
-            overall_accuracy REAL NOT NULL DEFAULT 0,
-            results TEXT,
-            created_at TEXT NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS login_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            login_date TEXT NOT NULL,
-            UNIQUE(user_id, login_date)
-        )
-    """)
     conn.commit()
     conn.close()
 
@@ -2393,7 +2482,7 @@ def register_user():
     salt, password_hash = _hash_password(password)
     created_at = datetime.now().isoformat(timespec="seconds")
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
 
     try:
         # password = "" is kept only because the old database
@@ -2413,6 +2502,7 @@ def register_user():
                 created_at
             )
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
             """,
             (
                 name,
@@ -2426,14 +2516,15 @@ def register_user():
         )
 
         conn.commit()
-        user_id = cur.lastrowid
+        inserted = cur.fetchone()
+        user_id = inserted["id"] if inserted else None
 
-    except sqlite3.IntegrityError as e:
+    except (sqlite3.IntegrityError, PostgresIntegrityError) as e:
         conn.rollback()
         conn.close()
 
         # Only report duplicate email when it actually is one
-        if "UNIQUE constraint failed: users.email" in str(e):
+        if "UNIQUE constraint failed: users.email" in str(e) or "users_email_key" in str(e):
             return jsonify({
                 "success": False,
                 "message": "An account with this email already exists."
@@ -2490,8 +2581,7 @@ def login_user():
             "message": "Email and password are required."
         }), 400
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = db_connect()
 
     row = conn.execute(
         """
@@ -2645,13 +2735,14 @@ def save_attempt():
 
         created_at = datetime.now().isoformat(timespec="seconds")
 
-        conn = sqlite3.connect(DB_PATH)
+        conn = db_connect()
         cursor = conn.execute("""
             INSERT INTO attempts (
                 user_id, language, character, recognized, confidence,
                 accuracy, is_correct, stroke_count, stroke_analysis,
                 mistake_analysis, feedback, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
         """, (
             current_user["id"],
             str(language),
@@ -2666,8 +2757,9 @@ def save_attempt():
             data.get("feedback"),
             created_at,
         ))
+        inserted = cursor.fetchone()
         conn.commit()
-        attempt_id = cursor.lastrowid
+        attempt_id = inserted["id"] if inserted else None
         conn.close()
 
         return jsonify({
@@ -2895,7 +2987,7 @@ def submit_quiz():
     )
 
     # Save one complete quiz attempt.
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_connect()
 
     cursor = conn.execute("""
         INSERT INTO quiz_attempts (
@@ -2910,6 +3002,7 @@ def submit_quiz():
             created_at
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        RETURNING id
     """, (
         current_user["id"],
         quiz_language,
@@ -2925,8 +3018,9 @@ def submit_quiz():
         completed_at,
     ))
 
+    inserted = cursor.fetchone()
     conn.commit()
-    quiz_attempt_id = cursor.lastrowid
+    quiz_attempt_id = inserted["id"] if inserted else None
     conn.close()
 
     return jsonify({
@@ -2961,8 +3055,7 @@ def get_quiz_performance():
             "message": "Please log in to view quiz performance."
         }), 401
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = db_connect()
 
     rows = conn.execute("""
         SELECT
@@ -3149,8 +3242,7 @@ def get_quiz_attempts():
         min(limit, 100)
     )
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = db_connect()
 
     rows = conn.execute("""
         SELECT
@@ -4575,8 +4667,7 @@ def get_ai_summary_alias():
 
 def _load_user_attempts(user_id, limit=1000):
     """Load practice attempts belonging only to the logged-in user."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = db_connect()
 
     rows = conn.execute("""
         SELECT id, language, character, recognized, confidence, accuracy,
@@ -6688,8 +6779,7 @@ def get_attempts():
         limit = 100
     limit = max(1, min(limit, 200))
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = db_connect()
     rows = conn.execute("""
         SELECT id, language, character, recognized, confidence, accuracy,
                is_correct, stroke_count, stroke_analysis, mistake_analysis,
