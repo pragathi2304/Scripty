@@ -7,6 +7,7 @@ import io
 import pickle
 import shutil
 import tempfile
+import time
 import traceback
 import sqlite3
 
@@ -3583,9 +3584,17 @@ def predict():
             language
         ]
 
+        prediction_start = time.time()
+
         prediction = model.predict(
             processed_image,
             verbose=0
+        )
+
+        prediction_time = time.time() - prediction_start
+
+        print(
+            f"[PREDICTION TIME] {prediction_time:.2f} seconds"
         )
 
         probabilities = prediction[
