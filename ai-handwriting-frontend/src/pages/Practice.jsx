@@ -2510,41 +2510,68 @@ const Page = styled.div`
 const Navbar = styled.nav`
   height: 78px;
   padding: 0 6%;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
+
   background: rgba(11, 7, 24, 0.96);
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+
   position: sticky;
   top: 0;
   z-index: 100;
+
   backdrop-filter: blur(12px);
+
+  flex-wrap: nowrap;
+  overflow: hidden;
+
+  @media (max-width: 1100px) {
+    padding: 0 3%;
+  }
+
+  @media (max-width: 850px) {
+    height: 70px;
+  }
 `;
 
 
 const LogoLink = styled(Link)`
   display: inline-flex;
-
   align-items: center;
-
   text-decoration: none;
+
+  flex-shrink: 0;
 `;
 
 
 const LogoImage = styled.img`
-  width: 185px;
-
+  width: 190px;
   height: auto;
-
   display: block;
+  object-fit: contain;
+
+  @media (max-width: 1100px) {
+    width: 160px;
+  }
+
+  @media (max-width: 850px) {
+    width: 140px;
+  }
 `;
 
 
 const NavLinks = styled.div`
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+
   gap: 30px;
   margin-left: auto;
+
+  flex-wrap: nowrap;
+  min-width: 0;
 
   a,
   button {
@@ -2554,6 +2581,7 @@ const NavLinks = styled.div`
     font-weight: 400;
     text-decoration: none;
     white-space: nowrap;
+
     transition: color 0.2s ease;
   }
 
@@ -2562,26 +2590,34 @@ const NavLinks = styled.div`
     color: #ffffff;
   }
 
-  @media (max-width: 1050px) {
+  @media (max-width: 1100px) {
     gap: 18px;
-    overflow-x: auto;
-    padding-left: 20px;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  @media (max-width: 700px) {
-    gap: 14px;
 
     a,
     button {
       font-size: 12px;
     }
   }
+
+  @media (max-width: 850px) {
+    gap: 14px;
+
+    a,
+    button {
+      font-size: 11px;
+    }
+  }
+
+  @media (max-width: 650px) {
+    gap: 12px;
+
+    a,
+    button {
+      font-size: 10px;
+    }
+  }
 `;
+
 
 const LogoutButton = styled.button`
   border: none;
@@ -2596,6 +2632,18 @@ const Active = styled.span`
   font-size: 13px;
   font-weight: 400;
   white-space: nowrap;
+
+  @media (max-width: 1100px) {
+    font-size: 12px;
+  }
+
+  @media (max-width: 850px) {
+    font-size: 11px;
+  }
+
+  @media (max-width: 650px) {
+    font-size: 10px;
+  }
 `;
 
 
