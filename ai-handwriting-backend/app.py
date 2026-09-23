@@ -3586,6 +3586,10 @@ def predict():
 
         prediction_start = time.time()
 
+        print(
+            f"[PREDICTION START] {language}"
+        )
+
         prediction = model.predict(
             processed_image,
             verbose=0
