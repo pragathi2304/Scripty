@@ -1440,7 +1440,6 @@ function Practice() {
 
         </LogoLink>
 
-
         <NavLinks>
 
           <Link to="/dashboard">
@@ -1461,6 +1460,14 @@ function Practice() {
 
           <Link to="/quiz-performance">
             Quiz Performance
+          </Link>
+
+          <Link to="/profile">
+            Profile
+          </Link>
+
+          <Link to="/settings">
+            Settings
           </Link>
 
           <LogoutButton
@@ -2508,20 +2515,30 @@ const Page = styled.div`
 
 
 const Navbar = styled.nav`
-  height: 78px;
+  min-height: 78px;
 
   padding: 0 6%;
 
   display: flex;
+
   align-items: center;
+
   justify-content: space-between;
 
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid
+    rgba(255, 255, 255, 0.07);
 
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  gap: 30px;
+
+  @media (max-width: 1200px) {
+    padding: 18px 5%;
+
+    flex-direction: column;
+
+    align-items: flex-start;
+  }
 `;
+
 
 
 const LogoLink = styled(Link)`
@@ -2539,66 +2556,110 @@ const LogoImage = styled.img`
   height: auto;
 
   display: block;
+
+  @media (max-width: 700px) {
+    width: 160px;
+  }
 `;
+
 
 
 const NavLinks = styled.div`
   display: flex;
+
   align-items: center;
-  gap: 30px;
-  margin-left: auto;
+
+  gap: 28px;
+
+  white-space: nowrap;
+
+  @media (max-width: 1400px) {
+    gap: 22px;
+  }
+
+  @media (max-width: 700px) {
+    gap: 18px;
+
+    overflow-x: auto;
+
+    max-width: 100%;
+
+    padding-bottom: 5px;
+  }
 
   a,
   button {
     color: #91899f;
+
     font-family: inherit;
+
     font-size: 13px;
+
     font-weight: 400;
+
     text-decoration: none;
-    white-space: nowrap;
+
+    padding: 0;
+
+    background: transparent;
+
+    border: 0;
+
+    border-radius: 0;
+
     transition: color 0.2s ease;
+
+    white-space: nowrap;
   }
 
   a:hover,
   button:hover {
-    color: #ffffff;
-  }
-
-  @media (max-width: 1050px) {
-    gap: 18px;
-    overflow-x: auto;
-    padding-left: 20px;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
-  }
-
-  @media (max-width: 700px) {
-    gap: 14px;
-
-    a,
-    button {
-      font-size: 12px;
-    }
+    color: white;
   }
 `;
+
+
 
 const LogoutButton = styled.button`
-  border: none;
+  color: #91899f;
+
+  font-size: 13px;
+
+  font-weight: 400;
+
+  text-decoration: none;
+
   padding: 0;
+
   background: transparent;
+
+  border: 0;
+
+  border-radius: 0;
+
   cursor: pointer;
+
+  transition: color 0.2s ease;
+
+  white-space: nowrap;
+
+  &:hover {
+    color: white;
+  }
 `;
+
 
 
 const Active = styled.span`
   color: #b99cff;
+
   font-size: 13px;
+
   font-weight: 400;
+
   white-space: nowrap;
 `;
+
 
 
 const Main = styled.main`
