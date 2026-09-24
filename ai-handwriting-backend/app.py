@@ -7,8 +7,8 @@ import io
 import pickle
 import shutil
 import tempfile
-import time
 import traceback
+import time
 import sqlite3
 
 # PostgreSQL is used on Render when DATABASE_URL is configured.
@@ -3585,20 +3585,14 @@ def predict():
         ]
 
         prediction_start = time.time()
-
-        print(
-            f"[PREDICTION START] {language}"
-        )
-
         prediction = model.predict(
             processed_image,
             verbose=0
         )
-
-        prediction_time = time.time() - prediction_start
-
+        prediction_elapsed = time.time() - prediction_start
         print(
-            f"[PREDICTION TIME] {prediction_time:.2f} seconds"
+            f"[PREDICTION TIME] {language}: {prediction_elapsed:.2f} seconds",
+            flush=True
         )
 
         probabilities = prediction[
